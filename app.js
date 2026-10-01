@@ -18,6 +18,22 @@ const app = initializeApp(FIREBASE_CONFIG);
 const db = getFirestore(app);
 let alunosCache = [];
 
+// Modelo atual da Groq (o llama3-70b-8192 foi descontinuado e causava o erro 400)
+const GROQ_MODEL = "llama-3.3-70b-versatile";
+
+// A IA às vezes devolve listas/objetos em vez de texto; converte tudo para texto legível
+function paraTexto(v) {
+    if (v == null) return '';
+    if (typeof v === 'string') return v;
+    if (Array.isArray(v)) return v.map(paraTexto).map(x => '• ' + x).join('\n');
+    if (typeof v === 'object') return Object.entries(v).map(([k, val]) => `${k}: ${paraTexto(val)}`).join('\n');
+    return String(v);
+}
+
+function esc(str) {
+    return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 // ==========================================
 // GESTÃO DINÂMICA DE TRANSTORNOS
 // ==========================================
@@ -49,13 +65,15 @@ function renderizarTranstornos() {
         div.className = 'checkbox-card';
         div.innerHTML = `
             <label class="checkbox-label">
-                <input type="checkbox" class="aluno-diag" value="${t}">
-                <span>${t}</span>
+                <input type="checkbox" class="aluno-diag" value="${esc(t)}">
+                <span>${esc(t)}</span>
             </label>
-            ${!isPadrao ? `<button type="button" class="btn-remove-tag" onclick="excluirTranstorno('${t}')" title="Excluir"><i class="fas fa-times"></i></button>` : ''}
+            ${!isPadrao ? `<button type="button" class="btn-remove-tag" data-nome="${esc(t)}" title="Excluir"><i class="fas fa-times"></i></button>` : ''}
         `;
         container.appendChild(div);
     });
+    container.querySelectorAll('.btn-remove-tag').forEach(b =>
+        b.addEventListener('click', () => window.excluirTranstorno(b.dataset.nome)));
 }
 
 document.getElementById('btn-add-transtorno').addEventListener('click', () => {
@@ -112,11 +130,11 @@ async function carregarAlunos() {
 
         querySnapshot.forEach((doc) => {
             const dados = doc.data(); dados.id = doc.id; alunosCache.push(dados);
-            const tagsHTML = dados.diagnosticos.map(d => `<span class="tag">${d.split('(')[0].trim()}</span>`).join('');
+            const tagsHTML = (dados.diagnosticos || []).map(d => `<span class="tag">${esc(d.split('(')[0].trim())}</span>`).join('');
             
             const li = document.createElement('li');
             li.innerHTML = `
-                <div><strong>${dados.nome}</strong><small>${dados.serie}</small><div class="aluno-tags">${tagsHTML}</div></div>
+                <div><strong>${esc(dados.nome)}</strong><br><small>${esc(dados.serie)}</small><div class="aluno-tags">${tagsHTML}</div></div>
                 <div>
                     <button class="btn-icon edit" onclick="editarAluno('${dados.id}')"><i class="fas fa-edit"></i></button>
                     <button class="btn-icon delete" onclick="excluirAluno('${dados.id}')"><i class="fas fa-trash"></i></button>
@@ -212,18 +230,28 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY_IA}` },
-            body: JSON.stringify({ 
-                model: "llama3-70b-8192", 
-                messages: [{ role: "system", content: systemPrompt }], 
-                temperature: 0.6, 
-                response_format: { type: "json_object" } 
+            body: JSON.stringify({
+                model: GROQ_MODEL,
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: `Gere o PEI em formato JSON para o estudante ${aluno.nome} (${aluno.serie}), na disciplina de ${disciplina}.` }
+                ],
+                temperature: 0.6,
+                max_tokens: 4096,
+                response_format: { type: "json_object" }
             })
         });
 
         const data = await response.json();
-        if(!data.choices) throw new Error("Erro na estrutura da resposta da IA");
-        
-        const peiGerado = JSON.parse(data.choices[0].message.content);
+        if (!response.ok || !data.choices) {
+            // Mostra o motivo real devolvido pela Groq (modelo inválido, chave, limite, etc.)
+            throw new Error(data?.error?.message || `Erro HTTP ${response.status}`);
+        }
+
+        const bruto = JSON.parse(data.choices[0].message.content);
+        const peiGerado = {};
+        ["historico", "habilidades", "barreiras", "objetivos", "metodologias", "avaliacao", "parecer"]
+            .forEach(k => peiGerado[k] = paraTexto(bruto[k]));
 
         // Injeção de Dados no Layout de Impressão (PDF)
         const dataAtual = new Date().toLocaleDateString('pt-BR');
@@ -248,7 +276,7 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
 
     } catch (e) { 
         console.error(e);
-        showToast("Erro na IA. Tente novamente.", "error"); 
+        showToast("Erro na IA: " + e.message, "error"); 
     }
     finally { btnGerar.disabled = false; btnGerar.innerHTML = '<i class="fas fa-magic"></i> Gerar PEI da Disciplina com IA'; }
 });
