@@ -18,12 +18,22 @@ const app = initializeApp(FIREBASE_CONFIG);
 const db = getFirestore(app);
 let alunosCache = [];
 
-// Modelos Groq em ordem de preferência. A Groq descontinuou os modelos Llama
-// (llama3-70b-8192, llama-3.3-70b-versatile, llama-3.1-8b-instant) para contas gratuitas/developer.
+// Modelos Groq em ordem de preferência (os Llama foram descontinuados para contas gratuitas/developer).
 // Se um modelo falhar com "não existe", o código tenta automaticamente o próximo.
 const GROQ_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
 
-// Extrai o JSON mesmo que a IA envolva a resposta em ```json ... ``` ou texto extra
+function paraTexto(v) {
+    if (v == null) return '';
+    if (typeof v === 'string') return v;
+    if (Array.isArray(v)) return v.map(paraTexto).map(x => '• ' + x).join('\n');
+    if (typeof v === 'object') return Object.entries(v).map(([k, val]) => `${k}: ${paraTexto(val)}`).join('\n');
+    return String(v);
+}
+
+function esc(str) {
+    return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 function extrairJSON(txt) {
     try { return JSON.parse(txt); } catch (_) {}
     const limpo = txt.replace(/```json|```/gi, '').trim();
@@ -35,6 +45,220 @@ function extrairJSON(txt) {
 async function chamarGroq(messages) {
     let ultimoErro;
     for (const model of GROQ_MODELS) {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY_IA}` },
+            body: JSON.stringify({
+                model,
+                messages,
+                temperature: 0.6,
+                max_completion_tokens: 8192,
+                reasoning_effort: "low",
+                response_format: { type: "json_object" }
+            })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (response.ok && data.choices?.[0]?.message?.content) return data.choices[0].message.content;
+        ultimoErro = new Error(data?.error?.message || `Erro HTTP ${response.status}`);
+        if (![400, 404].includes(response.status)) throw ultimoErro;
+        console.warn(`Modelo ${model} falhou:`, ultimoErro.message);
+    }
+    throw ultimoErro;
+}
+
+// ==========================================
+// GESTÃO DINÂMICA DE TRANSTORNOS
+// ==========================================
+const TRANSTORNOS_PADRAO = [
+    "Transtorno do Espectro Autista (TEA)",
+    "Transtorno de Déficit de Atenção e Hiperatividade (TDAH)",
+    "Transtorno do Desenvolvimento Intelectual",
+    "Transtornos Específicos de Aprendizagem",
+    "Transtornos da Comunicação",
+    "Transtornos Motores",
+    "Ansiedade e Depressão"
+];
+
+let listaTranstornos = [];
+
+function inicializarTranstornos() {
+    const salvos = JSON.parse(localStorage.getItem('transtornos_customizados') || '[]');
+    listaTranstornos = [...new Set([...TRANSTORNOS_PADRAO, ...salvos])];
+    renderizarTranstornos();
+}
+
+function renderizarTranstornos() {
+    const container = document.getElementById('container-transtornos');
+    container.innerHTML = '';
+    
+    listaTranstornos.forEach(t => {
+        const isPadrao = TRANSTORNOS_PADRAO.includes(t);
+        const div = document.createElement('div');
+        div.className = 'checkbox-card';
+        div.innerHTML = `
+            <label class="checkbox-label">
+                <input type="checkbox" class="aluno-diag" value="${esc(t)}">
+                <span>${esc(t)}</span>
+            </label>
+            ${!isPadrao ? `<button type="button" class="btn-remove-tag" data-nome="${esc(t)}" title="Excluir"><i class="fas fa-times"></i></button>` : ''}
+        `;
+        container.appendChild(div);
+    });
+    container.querySelectorAll('.btn-remove-tag').forEach(b =>
+        b.addEventListener('click', () => window.excluirTranstorno(b.dataset.nome)));
+}
+
+document.getElementById('btn-add-transtorno').addEventListener('click', () => {
+    const input = document.getElementById('input-novo-transtorno');
+    const valor = input.value.trim();
+    if (!valor) return showToast("Digite o nome do transtorno.", "error");
+    if (listaTranstornos.includes(valor)) return showToast("Este transtorno já existe na lista.", "error");
+
+    listaTranstornos.push(valor);
+    
+    const salvos = JSON.parse(localStorage.getItem('transtornos_customizados') || '[]');
+    salvos.push(valor);
+    localStorage.setItem('transtornos_customizados', JSON.stringify(salvos));
+    
+    input.value = '';
+    renderizarTranstornos();
+    showToast("Transtorno adicionado à lista!", "success");
+});
+
+window.excluirTranstorno = (nome) => {
+    if (!confirm(`Excluir "${nome}" da lista de opções?`)) return;
+    
+    listaTranstornos = listaTranstornos.filter(t => t !== nome);
+    let salvos = JSON.parse(localStorage.getItem('transtornos_customizados') || '[]');
+    salvos = salvos.filter(t => t !== nome);
+    localStorage.setItem('transtornos_customizados', JSON.stringify(salvos));
+    
+    renderizarTranstornos();
+};
+
+// Navegação UI Web
+document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        const target = e.currentTarget.getAttribute('data-target');
+        e.currentTarget.classList.add('active');
+        document.getElementById(target).classList.add('active');
+    });
+});
+
+// ==========================================
+// CRUD DE ALUNOS
+// ==========================================
+async function carregarAlunos() {
+    const listaEl = document.getElementById('lista-crud-alunos');
+    const selectEl = document.getElementById('pei-aluno-select');
+    try {
+        const querySnapshot = await getDocs(collection(db, "alunos_perfil"));
+        alunosCache = []; listaEl.innerHTML = '';
+        selectEl.innerHTML = '<option value="">Selecione um aluno registado...</option>';
+
+        if (querySnapshot.empty) { listaEl.innerHTML = '<li class="state-message">Nenhum aluno registado.</li>'; return; }
+
+        querySnapshot.forEach((doc) => {
+            const dados = doc.data(); dados.id = doc.id; alunosCache.push(dados);
+            const tagsHTML = (dados.diagnosticos || []).map(d => `<span class="tag">${esc(d.split('(')[0].trim())}</span>`).join('');
+            
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <div><strong>${esc(dados.nome)}</strong><br><small>${esc(dados.serie)}</small><div class="aluno-tags">${tagsHTML}</div></div>
+                <div>
+                    <button class="btn-icon edit" onclick="editarAluno('${dados.id}')"><i class="fas fa-edit"></i></button>
+                    <button class="btn-icon delete" onclick="excluirAluno('${dados.id}')"><i class="fas fa-trash"></i></button>
+                </div>
+            `;
+            listaEl.appendChild(li);
+            
+            const option = document.createElement('option');
+            option.value = dados.id; option.text = `${dados.nome} - ${dados.serie}`;
+            selectEl.appendChild(option);
+        });
+    } catch (error) { console.error(error); }
+}
+
+document.getElementById('btn-salvar-aluno').addEventListener('click', async () => {
+    const id = document.getElementById('aluno-id').value;
+    const nome = document.getElementById('aluno-nome').value.trim();
+    const serie = document.getElementById('aluno-serie').value.trim();
+    const diags = Array.from(document.querySelectorAll('.aluno-diag:checked')).map(cb => cb.value);
+
+    if (!nome || !serie || diags.length === 0) return showToast("Preencha nome, série e no mínimo um diagnóstico.", "error");
+
+    const payload = { nome, serie, diagnosticos: diags, atualizado_em: serverTimestamp() };
+    try {
+        if (id) await updateDoc(doc(db, "alunos_perfil", id), payload);
+        else { payload.criado_em = serverTimestamp(); await addDoc(collection(db, "alunos_perfil"), payload); }
+        limparFormAluno(); carregarAlunos(); showToast("Salvo com sucesso!", "success");
+    } catch (e) { console.error(e); showToast("Erro ao salvar: " + e.message, "error"); }
+});
+
+window.editarAluno = (id) => {
+    const aluno = alunosCache.find(a => a.id === id);
+    if(!aluno) return;
+    
+    // Se o aluno tiver um transtorno antigo que foi deletado, adiciona de volta à lista temporariamente
+    (aluno.diagnosticos || []).forEach(d => {
+        if (!listaTranstornos.includes(d)) {
+            listaTranstornos.push(d);
+            renderizarTranstornos();
+        }
+    });
+
+    document.getElementById('aluno-id').value = aluno.id;
+    document.getElementById('aluno-nome').value = aluno.nome;
+    document.getElementById('aluno-serie').value = aluno.serie;
+    
+    document.querySelectorAll('.aluno-diag').forEach(cb => {
+        cb.checked = (aluno.diagnosticos || []).includes(cb.value);
+    });
+    document.getElementById('btn-cancelar-aluno').style.display = 'inline-flex';
+};
+
+window.excluirAluno = async (id) => {
+    if(confirm("Excluir registo deste aluno?")) { await deleteDoc(doc(db, "alunos_perfil", id)); carregarAlunos(); }
+};
+
+document.getElementById('btn-cancelar-aluno').addEventListener('click', limparFormAluno);
+function limparFormAluno() {
+    document.getElementById('aluno-id').value = ''; document.getElementById('aluno-nome').value = ''; document.getElementById('aluno-serie').value = '';
+    document.querySelectorAll('.aluno-diag').forEach(cb => cb.checked = false);
+    document.getElementById('btn-cancelar-aluno').style.display = 'none';
+}
+
+// ==========================================
+// GERAÇÃO DE PEI E PROMPT CLÍNICO AVANÇADO
+// ==========================================
+document.getElementById('btn-gerar').addEventListener('click', async () => {
+    const alunoId = document.getElementById('pei-aluno-select').value;
+    const disciplina = document.getElementById('pei-disciplina').value;
+    const conteudos = document.getElementById('pei-conteudos').value.trim();
+
+    if (!alunoId || !disciplina) return showToast("Selecione aluno e disciplina.", "error");
+
+    const aluno = alunosCache.find(a => a.id === alunoId);
+    const diagsString = (aluno.diagnosticos || []).join(', ');
+
+    const btnGerar = document.getElementById('btn-gerar');
+    btnGerar.disabled = true; btnGerar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> A gerar documento...';
+
+    const systemPrompt = `Você é um especialista em Educação Inclusiva e Neurociência da Aprendizagem. 
+    O estudante possui os seguintes diagnósticos confirmados: ${diagsString}. 
+    
+    DIRETRIZ CLÍNICA E PEDAGÓGICA RIGOROSA: 
+    1. Acesse sua base de dados clínica avançada para discorrer com exatidão sobre CADA UM dos transtornos listados acima, mesmo que sejam condições raras, síndromes específicas ou transtornos recentemente adicionados ao perfil pelo professor.
+    2. Respeite as delimitações biológicas e cognitivas de CADA transtorno selecionado separadamente. NÃO misture características de condições distintas (ex: não atribua traços do TEA ao TDAH a menos que as intersecções sejam comorbidades reais apontadas).
+    3. O Plano Educacional Individualizado deve ser construído EXCLUSIVAMENTE para a disciplina de ${disciplina}. Adapte a linguagem, os desafios e os métodos à epistemologia dessa matéria.
+    4. Integre os conteúdos atuais: "${conteudos}".
+
+    Retorne APENAS um objeto JSON válido contendo rigorosamente estas chaves textuais (sem marcações markdown):
+    "historico", "habilidades", "barreiras", "objetivos", "metodologias", "avaliacao", "parecer".`;
+
+    try {
         const conteudoIA = await chamarGroq([
             { role: "system", content: systemPrompt },
             { role: "user", content: `Gere o PEI em formato JSON para o estudante ${aluno.nome} (${aluno.serie}), na disciplina de ${disciplina}.` }
