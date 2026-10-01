@@ -1,0 +1,266 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
+import { getFirestore, collection, addDoc, serverTimestamp, getDocs, doc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-firestore.js";
+
+// ==========================================
+// OFUSCAÇÃO DE CHAVES
+// ==========================================
+const API_KEY_IA = atob('Z3NrX0pJM24waTlp' + 'ZE9tMW1ScHJTSDN3' + 'V0dkeWIzRlk4QmdV' + 'OHVzVXVmY2JRajlU' + 'bTZmdk5WbXY='); 
+const FIREBASE_CONFIG = {
+    apiKey: atob('QUl6YVN5QURkTE4w' + 'Zl8wSFRzRTVOSTNI' + 'UHRoSnFfZEY3WUlP' + 'THpF'),
+    authDomain: "peipeipei-36a49.firebaseapp.com",
+    projectId: "peipeipei-36a49",
+    storageBucket: "peipeipei-36a49.firebasestorage.app",
+    messagingSenderId: "931401419828",
+    appId: "1:931401419828:web:608406806e52d82e01ce61"
+};
+
+const app = initializeApp(FIREBASE_CONFIG);
+const db = getFirestore(app);
+let alunosCache = [];
+
+// ==========================================
+// GESTÃO DINÂMICA DE TRANSTORNOS
+// ==========================================
+const TRANSTORNOS_PADRAO = [
+    "Transtorno do Espectro Autista (TEA)",
+    "Transtorno de Déficit de Atenção e Hiperatividade (TDAH)",
+    "Transtorno do Desenvolvimento Intelectual",
+    "Transtornos Específicos de Aprendizagem",
+    "Transtornos da Comunicação",
+    "Transtornos Motores",
+    "Ansiedade e Depressão"
+];
+
+let listaTranstornos = [];
+
+function inicializarTranstornos() {
+    const salvos = JSON.parse(localStorage.getItem('transtornos_customizados') || '[]');
+    listaTranstornos = [...new Set([...TRANSTORNOS_PADRAO, ...salvos])];
+    renderizarTranstornos();
+}
+
+function renderizarTranstornos() {
+    const container = document.getElementById('container-transtornos');
+    container.innerHTML = '';
+    
+    listaTranstornos.forEach(t => {
+        const isPadrao = TRANSTORNOS_PADRAO.includes(t);
+        const div = document.createElement('div');
+        div.className = 'checkbox-card';
+        div.innerHTML = `
+            <label class="checkbox-label">
+                <input type="checkbox" class="aluno-diag" value="${t}">
+                <span>${t}</span>
+            </label>
+            ${!isPadrao ? `<button type="button" class="btn-remove-tag" onclick="excluirTranstorno('${t}')" title="Excluir"><i class="fas fa-times"></i></button>` : ''}
+        `;
+        container.appendChild(div);
+    });
+}
+
+document.getElementById('btn-add-transtorno').addEventListener('click', () => {
+    const input = document.getElementById('input-novo-transtorno');
+    const valor = input.value.trim();
+    if (!valor) return showToast("Digite o nome do transtorno.", "error");
+    if (listaTranstornos.includes(valor)) return showToast("Este transtorno já existe na lista.", "error");
+
+    listaTranstornos.push(valor);
+    
+    const salvos = JSON.parse(localStorage.getItem('transtornos_customizados') || '[]');
+    salvos.push(valor);
+    localStorage.setItem('transtornos_customizados', JSON.stringify(salvos));
+    
+    input.value = '';
+    renderizarTranstornos();
+    showToast("Transtorno adicionado à lista!", "success");
+});
+
+window.excluirTranstorno = (nome) => {
+    if (!confirm(`Excluir "${nome}" da lista de opções?`)) return;
+    
+    listaTranstornos = listaTranstornos.filter(t => t !== nome);
+    let salvos = JSON.parse(localStorage.getItem('transtornos_customizados') || '[]');
+    salvos = salvos.filter(t => t !== nome);
+    localStorage.setItem('transtornos_customizados', JSON.stringify(salvos));
+    
+    renderizarTranstornos();
+};
+
+// Navegação UI Web
+document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        const target = e.currentTarget.getAttribute('data-target');
+        e.currentTarget.classList.add('active');
+        document.getElementById(target).classList.add('active');
+    });
+});
+
+// ==========================================
+// CRUD DE ALUNOS
+// ==========================================
+async function carregarAlunos() {
+    const listaEl = document.getElementById('lista-crud-alunos');
+    const selectEl = document.getElementById('pei-aluno-select');
+    try {
+        const querySnapshot = await getDocs(collection(db, "alunos_perfil"));
+        alunosCache = []; listaEl.innerHTML = '';
+        selectEl.innerHTML = '<option value="">Selecione um aluno registado...</option>';
+
+        if (querySnapshot.empty) { listaEl.innerHTML = '<li class="state-message">Nenhum aluno registado.</li>'; return; }
+
+        querySnapshot.forEach((doc) => {
+            const dados = doc.data(); dados.id = doc.id; alunosCache.push(dados);
+            const tagsHTML = dados.diagnosticos.map(d => `<span class="tag">${d.split('(')[0].trim()}</span>`).join('');
+            
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <div><strong>${dados.nome}</strong><small>${dados.serie}</small><div class="aluno-tags">${tagsHTML}</div></div>
+                <div>
+                    <button class="btn-icon edit" onclick="editarAluno('${dados.id}')"><i class="fas fa-edit"></i></button>
+                    <button class="btn-icon delete" onclick="excluirAluno('${dados.id}')"><i class="fas fa-trash"></i></button>
+                </div>
+            `;
+            listaEl.appendChild(li);
+            
+            const option = document.createElement('option');
+            option.value = dados.id; option.text = `${dados.nome} - ${dados.serie}`;
+            selectEl.appendChild(option);
+        });
+    } catch (error) { console.error(error); }
+}
+
+document.getElementById('btn-salvar-aluno').addEventListener('click', async () => {
+    const id = document.getElementById('aluno-id').value;
+    const nome = document.getElementById('aluno-nome').value.trim();
+    const serie = document.getElementById('aluno-serie').value.trim();
+    const diags = Array.from(document.querySelectorAll('.aluno-diag:checked')).map(cb => cb.value);
+
+    if (!nome || !serie || diags.length === 0) return showToast("Preencha nome, série e no mínimo um diagnóstico.", "error");
+
+    const payload = { nome, serie, diagnosticos: diags, atualizado_em: serverTimestamp() };
+    try {
+        if (id) await updateDoc(doc(db, "alunos_perfil", id), payload);
+        else { payload.criado_em = serverTimestamp(); await addDoc(collection(db, "alunos_perfil"), payload); }
+        limparFormAluno(); carregarAlunos(); showToast("Salvo com sucesso!", "success");
+    } catch (e) { showToast("Erro ao salvar.", "error"); }
+});
+
+window.editarAluno = (id) => {
+    const aluno = alunosCache.find(a => a.id === id);
+    if(!aluno) return;
+    
+    // Se o aluno tiver um transtorno antigo que foi deletado, adiciona de volta à lista temporariamente
+    aluno.diagnosticos.forEach(d => {
+        if (!listaTranstornos.includes(d)) {
+            listaTranstornos.push(d);
+            renderizarTranstornos();
+        }
+    });
+
+    document.getElementById('aluno-id').value = aluno.id;
+    document.getElementById('aluno-nome').value = aluno.nome;
+    document.getElementById('aluno-serie').value = aluno.serie;
+    
+    document.querySelectorAll('.aluno-diag').forEach(cb => {
+        cb.checked = aluno.diagnosticos.includes(cb.value);
+    });
+    document.getElementById('btn-cancelar-aluno').style.display = 'inline-flex';
+};
+
+window.excluirAluno = async (id) => {
+    if(confirm("Excluir registo deste aluno?")) { await deleteDoc(doc(db, "alunos_perfil", id)); carregarAlunos(); }
+};
+
+document.getElementById('btn-cancelar-aluno').addEventListener('click', limparFormAluno);
+function limparFormAluno() {
+    document.getElementById('aluno-id').value = ''; document.getElementById('aluno-nome').value = ''; document.getElementById('aluno-serie').value = '';
+    document.querySelectorAll('.aluno-diag').forEach(cb => cb.checked = false);
+    document.getElementById('btn-cancelar-aluno').style.display = 'none';
+}
+
+// ==========================================
+// GERAÇÃO DE PEI E PROMPT CLÍNICO AVANÇADO
+// ==========================================
+document.getElementById('btn-gerar').addEventListener('click', async () => {
+    const alunoId = document.getElementById('pei-aluno-select').value;
+    const disciplina = document.getElementById('pei-disciplina').value;
+    const conteudos = document.getElementById('pei-conteudos').value.trim();
+
+    if (!alunoId || !disciplina) return showToast("Selecione aluno e disciplina.", "error");
+
+    const aluno = alunosCache.find(a => a.id === alunoId);
+    const diagsString = aluno.diagnosticos.join(', ');
+
+    const btnGerar = document.getElementById('btn-gerar');
+    btnGerar.disabled = true; btnGerar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> A gerar documento...';
+
+    const systemPrompt = `Você é um especialista em Educação Inclusiva e Neurociência da Aprendizagem. 
+    O estudante possui os seguintes diagnósticos confirmados: ${diagsString}. 
+    
+    DIRETRIZ CLÍNICA E PEDAGÓGICA RIGOROSA: 
+    1. Acesse sua base de dados clínica avançada para discorrer com exatidão sobre CADA UM dos transtornos listados acima, mesmo que sejam condições raras, síndromes específicas ou transtornos recentemente adicionados ao perfil pelo professor.
+    2. Respeite as delimitações biológicas e cognitivas de CADA transtorno selecionado separadamente. NÃO misture características de condições distintas (ex: não atribua traços do TEA ao TDAH a menos que as intersecções sejam comorbidades reais apontadas).
+    3. O Plano Educacional Individualizado deve ser construído EXCLUSIVAMENTE para a disciplina de ${disciplina}. Adapte a linguagem, os desafios e os métodos à epistemologia dessa matéria.
+    4. Integre os conteúdos atuais: "${conteudos}".
+
+    Retorne APENAS um objeto JSON válido contendo rigorosamente estas chaves textuais (sem marcações markdown):
+    "historico", "habilidades", "barreiras", "objetivos", "metodologias", "avaliacao", "parecer".`;
+
+    try {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY_IA}` },
+            body: JSON.stringify({ 
+                model: "llama3-70b-8192", 
+                messages: [{ role: "system", content: systemPrompt }], 
+                temperature: 0.6, 
+                response_format: { type: "json_object" } 
+            })
+        });
+
+        const data = await response.json();
+        if(!data.choices) throw new Error("Erro na estrutura da resposta da IA");
+        
+        const peiGerado = JSON.parse(data.choices[0].message.content);
+
+        // Injeção de Dados no Layout de Impressão (PDF)
+        const dataAtual = new Date().toLocaleDateString('pt-BR');
+        
+        document.getElementById('print-nome').innerText = aluno.nome;
+        document.getElementById('print-serie').innerText = aluno.serie;
+        document.getElementById('print-diags').innerText = diagsString;
+        document.getElementById('print-disciplina').innerText = disciplina;
+        document.getElementById('print-data').innerText = dataAtual;
+
+        document.getElementById('print-historico').innerText = peiGerado.historico || conteudos;
+        document.getElementById('print-habilidades').innerText = peiGerado.habilidades;
+        document.getElementById('print-barreiras').innerText = peiGerado.barreiras;
+        document.getElementById('print-conteudos-out').innerText = conteudos;
+        document.getElementById('print-objetivos').innerText = peiGerado.objetivos;
+        document.getElementById('print-metodologias').innerText = peiGerado.metodologias;
+        document.getElementById('print-avaliacao').innerText = peiGerado.avaliacao;
+        document.getElementById('print-parecer').innerText = peiGerado.parecer;
+
+        document.getElementById('resultado-pei').style.display = 'block';
+        showToast("Documento estruturado para impressão!", "success");
+
+    } catch (e) { 
+        console.error(e);
+        showToast("Erro na IA. Tente novamente.", "error"); 
+    }
+    finally { btnGerar.disabled = false; btnGerar.innerHTML = '<i class="fas fa-magic"></i> Gerar PEI da Disciplina com IA'; }
+});
+
+document.getElementById('btn-imprimir').addEventListener('click', () => window.print());
+
+function showToast(msg, type = 'info') {
+    const t = document.createElement('div'); t.className = `toast ${type}`; t.innerHTML = `<span>${msg}</span>`;
+    document.getElementById('toast-container').appendChild(t);
+    setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 4000);
+}
+
+// Inicializações
+inicializarTranstornos();
+carregarAlunos();

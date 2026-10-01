@@ -1,0 +1,89 @@
+:root {
+    --primary: #0f52ba; --primary-dark: #0b3d8c;
+    --secondary: #8e44ad; --success: #27ae60;
+    --danger: #e74c3c; --bg-body: #f4f7fa;
+    --bg-card: #ffffff; --sidebar-bg: #1e293b;
+    --text-main: #334155; --text-muted: #64748b;
+    --border: #e2e8f0; --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: var(--bg-body); color: var(--text-main); }
+.app-layout { display: flex; height: 100vh; overflow: hidden; }
+#documento-impressao { display: none; }
+
+.mt-2 { margin-top: 15px; } .mt-3 { margin-top: 25px; } .p-0 { padding: 0 !important; }
+.flex-between { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+.grid-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+.btn { padding: 10px 16px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; transition: 0.2s; white-space: nowrap; }
+.btn-full { width: 100%; justify-content: center; padding: 14px 20px; font-size: 16px; }
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-secondary { background: var(--secondary); color: white; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-main); }
+.btn-icon { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 5px; }
+.btn-icon:hover.edit { color: var(--primary); }
+.btn-icon:hover.delete { color: var(--danger); }
+
+.sidebar { width: 280px; background: var(--sidebar-bg); color: white; display: flex; flex-direction: column; }
+.sidebar-header { padding: 25px 20px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+.sidebar-nav { display: flex; flex-direction: column; padding: 15px 0; }
+.nav-btn { background: none; border: none; color: #cbd5e1; padding: 15px 25px; text-align: left; font-size: 1rem; cursor: pointer; display: flex; align-items: center; gap: 12px; }
+.nav-btn.active { background: rgba(255,255,255,0.1); color: white; border-left: 4px solid var(--primary); font-weight: 600; }
+.main-content { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
+.top-header { background: var(--bg-card); padding: 15px 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+.container { padding: 30px; max-width: 1200px; margin: 0 auto; width: 100%; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+.card { background: var(--bg-card); border-radius: 10px; box-shadow: var(--shadow); border: 1px solid var(--border); margin-bottom: 20px; }
+.card-header { background: #f8fafc; padding: 15px 25px; border-bottom: 1px solid var(--border); }
+.card-body { padding: 25px; }
+
+.form-group label { display: block; font-weight: 600; margin-bottom: 8px; }
+input[type="text"], select, textarea { width: 100%; padding: 10px 15px; border: 1px solid #cbd5e1; border-radius: 6px; font-family: inherit; }
+.add-transtorno-box input { flex: 1; }
+
+.checkbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.checkbox-card { display: flex; align-items: center; justify-content: space-between; background: #f1f5f9; padding: 10px; border-radius: 6px; border: 1px solid transparent; }
+.checkbox-card .checkbox-label { display: flex; align-items: center; gap: 10px; flex: 1; cursor: pointer; }
+.checkbox-card:has(input:checked) { background: #eff6ff; border: 1px solid #bfdbfe; color: var(--primary-dark); font-weight: 600; }
+.btn-remove-tag { background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 12px; padding: 5px; }
+.btn-remove-tag:hover { color: var(--danger); }
+
+.lista-crud { list-style: none; max-height: 500px; overflow-y: auto; }
+.lista-crud li { padding: 15px 25px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.aluno-tags { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
+.tag { font-size: 0.7rem; background: #e2e8f0; padding: 2px 6px; border-radius: 4px; color: #475569; }
+#toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
+.toast { min-width: 250px; padding: 15px 20px; background: white; border-left: 5px solid var(--primary); border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: flex; align-items: center; gap: 12px; }
+
+/* Impressão PDF Oficial */
+@media print {
+    @page { size: A4; margin: 20mm; }
+    body { background: white; font-family: 'Arial', sans-serif; font-size: 11pt; color: #000; height: auto; overflow: visible; }
+    #interface-sistema, #toast-container { display: none !important; }
+    #documento-impressao { display: block !important; width: 100%; }
+
+    .pdf-page { width: 100%; position: relative; }
+    .page-break { page-break-before: always; }
+    .text-center { text-align: center; }
+    .pdf-header { text-align: center; margin-bottom: 25px; font-weight: bold; line-height: 1.3; }
+    .pdf-header h3 { font-size: 12pt; margin-bottom: 10px; }
+    .pdf-header h4 { font-size: 11pt; font-weight: normal; }
+    .doc-title { text-decoration: underline; font-weight: bold !important; margin-bottom: 5px; }
+    .pdf-section { margin-bottom: 15px; line-height: 1.6; }
+    .pdf-section p { margin-bottom: 4px; }
+    .pdf-sub-header { font-weight: bold; font-size: 10pt; background-color: #e0e0e0; padding: 5px; border: 1px solid #000; margin-bottom: 8px; margin-top: 15px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .pdf-box { border: 1px solid #000; padding: 10px; min-height: 60px; white-space: pre-wrap; font-size: 10.5pt; text-align: justify; }
+    
+    .pdf-table { width: 100%; border-collapse: collapse; margin-top: 20px; page-break-inside: avoid; }
+    .pdf-table th, .pdf-table td { border: 1px solid #000; padding: 12px; vertical-align: top; font-size: 10.5pt; }
+    .pdf-table th { background-color: #e0e0e0; font-weight: bold; text-align: center; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .pdf-table td { white-space: pre-wrap; text-align: justify; }
+
+    .pdf-signatures { margin-top: 60px; page-break-inside: avoid; }
+    .sig-grid { display: flex; justify-content: space-between; align-items: flex-end; padding: 0 10px; }
+    .sig-line { width: 30%; border-top: 1px solid #000; text-align: center; padding-top: 5px; font-size: 9pt; font-weight: bold; }
+}

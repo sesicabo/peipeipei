@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plataforma PEI - Educação Inclusiva SESI</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+
+    <!-- INTERFACE DO SISTEMA (Oculta na Impressão) -->
+    <div id="interface-sistema" class="app-layout">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2><i class="fas fa-brain"></i> PEI Plataforma</h2>
+                <p>Educação Inclusiva SESI</p>
+            </div>
+            <nav class="sidebar-nav">
+                <button class="nav-btn active" data-target="tab-alunos"><i class="fas fa-users"></i> Gestão de Alunos</button>
+                <button class="nav-btn" data-target="tab-pei"><i class="fas fa-file-signature"></i> Gerar PEI Disciplinar</button>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <header class="top-header">
+                <div class="header-title">
+                    <button class="menu-toggle" id="menu-toggle"><i class="fas fa-bars"></i></button>
+                    <h1 id="page-title">Gestão de Alunos</h1>
+                </div>
+            </header>
+
+            <div class="container">
+                <!-- ABA 1: GESTÃO DE ALUNOS -->
+                <section id="tab-alunos" class="tab-content active">
+                    <div class="grid-layout">
+                        <!-- Formulário -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 id="form-aluno-title"><i class="fas fa-user-plus"></i> Registar Novo Aluno</h3>
+                            </div>
+                            <div class="card-body">
+                                <input type="hidden" id="aluno-id">
+                                <div class="form-group">
+                                    <label for="aluno-nome">Nome Completo</label>
+                                    <input type="text" id="aluno-nome" placeholder="Ex: Maria Oliveira" required>
+                                </div>
+                                <div class="form-group mt-2">
+                                    <label for="aluno-serie">Ano/Série</label>
+                                    <input type="text" id="aluno-serie" placeholder="Ex: 1º Ano Ensino Médio" required>
+                                </div>
+                                
+                                <!-- Gestão Dinâmica de Transtornos -->
+                                <div class="form-group mt-2">
+                                    <label>Transtornos do Neurodesenvolvimento</label>
+                                    
+                                    <div class="checkbox-grid" id="container-transtornos">
+                                        <!-- Checkboxes serão renderizados aqui pelo JS -->
+                                    </div>
+                                    
+                                    <div class="add-transtorno-box mt-2 flex-between">
+                                        <input type="text" id="input-novo-transtorno" placeholder="Adicionar novo transtorno/síndrome...">
+                                        <button class="btn btn-outline" type="button" id="btn-add-transtorno">
+                                            <i class="fas fa-plus"></i> Adicionar
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="form-actions mt-3 flex-between">
+                                    <button class="btn btn-outline" id="btn-cancelar-aluno" style="display: none;">Cancelar</button>
+                                    <button class="btn btn-primary" id="btn-salvar-aluno"><i class="fas fa-save"></i> Guardar Aluno</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Lista CRUD -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3><i class="fas fa-list"></i> Alunos Registados</h3>
+                            </div>
+                            <div class="card-body p-0">
+                                <ul class="lista-crud" id="lista-crud-alunos">
+                                    <li class="state-message">A carregar banco de dados...</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ABA 2: GERAÇÃO DE PEI -->
+                <section id="tab-pei" class="tab-content">
+                    <div class="card form-section">
+                        <div class="card-header">
+                            <h3><i class="fas fa-book-open"></i> Configuração do Documento Disciplinar</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="grid-2">
+                                <div class="form-group">
+                                    <label for="pei-aluno-select">Selecionar Aluno</label>
+                                    <select id="pei-aluno-select" required></select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="pei-disciplina">Componente Curricular (Disciplina)</label>
+                                    <select id="pei-disciplina" required>
+                                        <option value="">Selecione a disciplina...</option>
+                                        <option value="História">História</option>
+                                        <option value="Geografia">Geografia</option>
+                                        <option value="Filosofia">Filosofia</option>
+                                        <option value="Sociologia">Sociologia</option>
+                                        <option value="Português">Português</option>
+                                        <option value="Literatura">Literatura</option>
+                                        <option value="Matemática">Matemática</option>
+                                        <option value="Física">Física</option>
+                                        <option value="Química">Química</option>
+                                        <option value="Biologia">Biologia</option>
+                                        <option value="Artes">Artes</option>
+                                        <option value="Educação Física">Educação Física</option>
+                                        <option value="Inglês">Inglês</option>
+                                        <option value="Projeto de Vida">Projeto de Vida</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-group mt-2">
+                                <label for="pei-conteudos">Conteúdos Específicos e Histórico Prévio na Disciplina</label>
+                                <textarea id="pei-conteudos" rows="3" placeholder="Insira os conteúdos a serem trabalhados e o contexto acadêmico atual do aluno nesta disciplina..."></textarea>
+                            </div>
+
+                            <div class="form-actions mt-3">
+                                <button class="btn btn-secondary btn-full" id="btn-gerar">
+                                    <i class="fas fa-magic"></i> Gerar PEI da Disciplina com IA
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card result-section mt-3" id="resultado-pei" style="display: none;">
+                        <div class="card-header flex-between">
+                            <h3><i class="fas fa-file-alt"></i> PEI Disciplinar Pronto</h3>
+                            <button class="btn btn-primary" id="btn-imprimir"><i class="fas fa-print"></i> Imprimir Documento Oficial</button>
+                        </div>
+                        <div class="card-body">
+                            <p>O documento foi formatado no padrão institucional do SESI. Clique em Imprimir para visualizar o layout A4 com quebras de página, cabeçalhos, tabelas divididas e espaço para assinaturas.</p>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- DOCUMENTO DE IMPRESSÃO (Oculto na Web) -->
+    <div id="documento-impressao">
+        <div class="pdf-page">
+            <div class="pdf-header">
+                <h3>SESI <br> Serviço Social da Indústria <br> Rede SESI de Educação</h3>
+                <h4 class="doc-title">DOCUMENTO ORIENTADOR EDUCAÇÃO INCLUSIVA NAS ESCOLAS DA REDE SESI</h4>
+                <h4>PLANO EDUCACIONAL INDIVIDUALIZADO - (PEI)<br>Atendimento Educacional Especializado (AEE)</h4>
+            </div>
+
+            <div class="pdf-section">
+                <p><strong>1. ESCOLA DE REFERÊNCIA SESI-PE</strong></p>
+                <p><strong>UNIDADE:</strong> SESI Cabo de Santo Agostinho</p>
+            </div>
+
+            <div class="pdf-section">
+                <div class="pdf-sub-header">DADOS DO ESTUDANTE:</div>
+                <p><strong>NOME COMPLETO:</strong> <span id="print-nome"></span></p>
+                <p><strong>IDADE:</strong> ____________ <strong>ANO/SÉRIE:</strong> <span id="print-serie"></span></p>
+                <p><strong>DIAGNÓSTICOS:</strong> <span id="print-diags"></span></p>
+            </div>
+
+            <div class="pdf-section">
+                <div class="pdf-sub-header">DADOS ESCOLARES:</div>
+                <p><strong>ANALISTA/PROFESSOR(a) DO AEE:</strong> _________________________________________________</p>
+                <p><strong>PROFISSIONAL DE APOIO:</strong> ________________________________________________________</p>
+                <p><strong>ENSINO:</strong> ( ) FUNDAMENTAL &nbsp;&nbsp;&nbsp; ( ) FUNDAMENTAL II &nbsp;&nbsp;&nbsp; ( X ) MÉDIO</p>
+                <p><strong>PROFESSOR:</strong> Victor Roberto &nbsp;&nbsp;&nbsp; <strong>DISCIPLINA:</strong> <span id="print-disciplina"></span></p>
+                <p><strong>DATA DA ELABORAÇÃO:</strong> <span id="print-data"></span> &nbsp;&nbsp;&nbsp; <strong>TURNO:</strong> ____________</p>
+            </div>
+
+            <div class="pdf-section">
+                <div class="pdf-sub-header text-center">HISTÓRICO ACADÊMICO DO ALUNO</div>
+                <div class="pdf-box" id="print-historico"></div>
+            </div>
+
+            <table class="pdf-table">
+                <thead><tr><th style="width: 50%;">HABILIDADES</th><th style="width: 50%;">BARREIRAS</th></tr></thead>
+                <tbody><tr><td id="print-habilidades"></td><td id="print-barreiras"></td></tr></tbody>
+            </table>
+        </div>
+
+        <div class="page-break"></div>
+
+        <div class="pdf-page">
+            <div class="pdf-header text-center" style="margin-bottom: 20px;">
+                <h4 class="doc-title" style="font-size: 10pt;">DOCUMENTO ORIENTADOR EDUCAÇÃO INCLUSIVA NAS ESCOLAS DA REDE SESI<br>SESI - Serviço Social da Indústria - Rede SESI de Educação</h4>
+            </div>
+
+            <div class="pdf-section">
+                <div class="pdf-sub-header text-center">CONTEÚDOS PROGRAMÁTICOS</div>
+                <div class="pdf-box" id="print-conteudos-out"></div>
+            </div>
+
+            <div class="pdf-section">
+                <div class="pdf-sub-header text-center">OBJETIVOS</div>
+                <div class="pdf-box" id="print-objetivos"></div>
+            </div>
+
+            <div class="pdf-section">
+                <div class="pdf-sub-header text-center">METODOLOGIAS</div>
+                <div class="pdf-box" id="print-metodologias"></div>
+            </div>
+
+            <div class="pdf-section">
+                <div class="pdf-sub-header text-center">AVALIAÇÃO</div>
+                <div class="pdf-box" id="print-avaliacao"></div>
+            </div>
+        </div>
+
+        <div class="page-break"></div>
+
+        <div class="pdf-page">
+            <div class="pdf-header text-center" style="margin-bottom: 20px;">
+                <h4 class="doc-title" style="font-size: 10pt;">DOCUMENTO ORIENTADOR EDUCAÇÃO INCLUSIVA NAS ESCOLAS DA REDE SESI<br>SESI - Serviço Social da Indústria - Rede SESI de Educação</h4>
+            </div>
+
+            <div class="pdf-section">
+                <div class="pdf-sub-header text-center">PARECER</div>
+                <div class="pdf-box" id="print-parecer"></div>
+            </div>
+
+            <div class="pdf-signatures">
+                <div class="pdf-sub-header text-center" style="margin-bottom: 60px;">ASSINATURAS</div>
+                <div class="sig-grid">
+                    <div class="sig-line">PROFESSOR</div>
+                    <div class="sig-line">SUPERVISOR ESCOLAR</div>
+                    <div class="sig-line">PROFISSIONAL DO AEE</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+    <script type="module" src="app.js"></script>
+</body>
+</html>
